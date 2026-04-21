@@ -9,6 +9,10 @@ import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import waitlistRoutes from './routes/waitlist.js';
 import blogRoutes from './routes/blog.js';
+import paymentRoutes from './routes/payments.js';
+import serviceRoutes from './routes/services.js';
+import customerAuthRoutes from './routes/customerAuth.js';
+import customerOrderRoutes from './routes/customerOrders.js';
 import { logger } from './utils/logger.js';
 
 const app = express();
@@ -36,6 +40,10 @@ app.use('/api/v1/waitlist', waitlistRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/blog', blogRoutes);
+app.use('/api/v1/services', serviceRoutes);
+app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/customer', customerAuthRoutes);
+app.use('/api/v1/customer', customerOrderRoutes);
 
 // Generic error handler
 app.use((err, _req, res, next) => {

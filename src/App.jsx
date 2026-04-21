@@ -1,8 +1,11 @@
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom';
 import NavbarVariant2 from './components/NavbarVariant2';
 import FooterVariant2 from './components/FooterVariant2';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
+import { CustomerAuthProvider } from './context/CustomerAuthContext';
+import { CartProvider } from './context/CartContext';
 
 // Pages
 import Home from './pages/HomePaletteTeal';
@@ -17,6 +20,12 @@ import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import Checkout from './pages/Checkout';
+import BookingConfirmed from './pages/BookingConfirmed';
+import BookingFailed from './pages/BookingFailed';
+import CustomerLogin from './pages/CustomerLogin';
+import CustomerDashboard from './pages/CustomerDashboard';
+import CustomerProtectedRoute from './components/CustomerProtectedRoute';
 import ScrollToTop from './components/ScrollToTop';
 
 function PublicLayout() {
@@ -34,28 +43,39 @@ function PublicLayout() {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <ScrollToTop />
-        <Routes>
-          <Route element={<PublicLayout />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/research" element={<Research />} />
-            <Route path="/services" element={<Services />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/blogs" element={<Blogs />} />
-            <Route path="/blogs/:id" element={<BlogPost />} />
-          </Route>
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route element={<ProtectedRoute minRole="REVIEWER" />}>
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/blog/new" element={<BlogEditor />} />
-            <Route path="/admin/blog/edit/:id" element={<BlogEditor />} />
-          </Route>
-        </Routes>
-      </Router>
+      <CustomerAuthProvider>
+        <CartProvider>
+          <Router>
+            <ScrollToTop />
+            <Routes>
+            <Route element={<PublicLayout />}>
+              <Route path="/" element={<Home />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/research" element={<Research />} />
+              <Route path="/services" element={<Services />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/blogs" element={<Blogs />} />
+              <Route path="/blogs/:id" element={<BlogPost />} />
+              <Route path="/checkout" element={<Checkout />} />
+              <Route path="/booking-confirmed" element={<BookingConfirmed />} />
+              <Route path="/booking-failed" element={<BookingFailed />} />
+              <Route path="/login" element={<CustomerLogin />} />
+              <Route element={<CustomerProtectedRoute />}>
+                <Route path="/dashboard" element={<CustomerDashboard />} />
+              </Route>
+            </Route>
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route element={<ProtectedRoute minRole="REVIEWER" />}>
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/blog/new" element={<BlogEditor />} />
+              <Route path="/admin/blog/edit/:id" element={<BlogEditor />} />
+            </Route>
+          </Routes>
+        </Router>
+        </CartProvider>
+      </CustomerAuthProvider>
     </AuthProvider>
   );
 }

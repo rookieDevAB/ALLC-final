@@ -177,4 +177,74 @@ router.get('/audit-events', roleGuard(Role.SUPERADMIN, Role.ADMIN), async (_req,
   return res.json({ items: events });
 });
 
+// ─── Customers ────────────────────────────────────────────────────────────────
+
+router.get('/customers', roleGuard(Role.SUPERADMIN, Role.ADMIN, Role.REVIEWER), async (req, res) => {
+  const search = req.query.search;
+  const page = Math.max(Number(req.query.page || 1), 1);
+  const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
+  const skip = (page - 1) * limit;
+
+  const where = {};
+  if (search) {
+    const query = String(search).trim();
+    if (query) {
+      where.OR = [
+        { name: { contains: query, mode: 'insensitive' } },
+        { email: { contains: query, mode: 'insensitive' } },
+        { phone: { contains: query, mode: 'insensitive' } },
+      ];
+    }
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.customer.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        isActive: true,
+        lastLoginAt: true,
+        createdAt: true,
+        _count: { select: { orders: true } },
+      },
+    }),
+    prisma.customer.count({ where }),
+  ]);
+
+  return res.json({
+    items,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.max(Math.ceil(total / limit), 1),
+    },
+  });
+});
+
+router.patch('/customers/:id', roleGuard(Role.SUPERADMIN, Role.ADMIN), async (req, res) => {
+  const schema = z.object({
+    isActive: z.boolean(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid payload' });
+  }
+
+  const updated = await prisma.customer.update({
+    where: { id: req.params.id },
+    data: { isActive: parsed.data.isActive },
+    select: { id: true, name: true, email: true, isActive: true },
+  });
+
+  await audit(req.user.sub, 'customer.update', 'Customer', updated.id, { isActive: updated.isActive });
+  return res.json({ item: updated });
+});
+
 export default router;

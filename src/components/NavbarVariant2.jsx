@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, ShoppingBag, User } from 'lucide-react';
+import { useCart } from '../context/CartContext';
+import { useCustomerAuth } from '../context/CustomerAuthContext';
+import CartDrawer from './CartDrawer';
 
 const TEAL = {
   primary: '#062926',
@@ -12,8 +15,11 @@ const TEAL = {
 
 export default function NavbarVariant2() {
   const [isOpen, setIsOpen]       = useState(false);
+  const [cartOpen, setCartOpen]   = useState(false);
   const [scrolled, setScrolled]   = useState(false);
   const location                  = useLocation();
+  const { itemCount }             = useCart();
+  const { customer }              = useCustomerAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -135,12 +141,42 @@ export default function NavbarVariant2() {
             ))}
           </div>
 
-          <Link to="/contact" className="nav-cta">
-            <span>Apply Now</span>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Link>
+          <div className="flex items-center gap-2 md:gap-3">
+            {/* User Login/Dashboard */}
+            {customer ? (
+              <Link to="/dashboard" className="p-2 rounded-lg transition-colors hover:bg-teal-50" style={{ color: TEAL.primary }}>
+                <User size={20} />
+              </Link>
+            ) : (
+              <Link to="/login" className="p-2 rounded-lg transition-colors hover:bg-teal-50" style={{ color: TEAL.muted }}>
+                <User size={20} />
+              </Link>
+            )}
+
+            {/* Cart icon */}
+            <button
+              onClick={() => setCartOpen(true)}
+              className="relative p-2 rounded-lg transition-colors hover:bg-teal-50"
+              aria-label="Open cart"
+              style={{ color: TEAL.muted }}
+            >
+              <ShoppingBag size={20} />
+              {itemCount > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 w-5 h-5 text-xs font-bold rounded-full flex items-center justify-center"
+                  style={{ background: TEAL.accent, color: '#fff' }}
+                >
+                  {itemCount}
+                </span>
+              )}
+            </button>
+            <Link to="/contact" className="nav-cta">
+              <span>Apply Now</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -154,14 +190,43 @@ export default function NavbarVariant2() {
               className="h-8 w-auto"
             />
           </Link>
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="transition-all duration-200"
-            style={{ color: TEAL.primary }}
-            aria-label="Toggle menu"
-          >
-            {isOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* User Login/Dashboard */}
+            {customer ? (
+              <Link to="/dashboard" className="p-2 rounded-lg" style={{ color: TEAL.primary }}>
+                <User size={20} />
+              </Link>
+            ) : (
+              <Link to="/login" className="p-2 rounded-lg" style={{ color: TEAL.primary }}>
+                <User size={20} />
+              </Link>
+            )}
+
+            <button
+              onClick={() => setCartOpen(true)}
+              className="relative p-2 rounded-lg"
+              aria-label="Open cart"
+              style={{ color: TEAL.primary }}
+            >
+              <ShoppingBag size={20} />
+              {itemCount > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 w-4 h-4 text-xs font-bold rounded-full flex items-center justify-center"
+                  style={{ background: TEAL.accent, color: '#fff' }}
+                >
+                  {itemCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="transition-all duration-200"
+              style={{ color: TEAL.primary }}
+              aria-label="Toggle menu"
+            >
+              {isOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
         </div>
 
         {isOpen && (
@@ -192,6 +257,9 @@ export default function NavbarVariant2() {
           </div>
         )}
       </nav>
+
+      {/* Cart Drawer */}
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
     </>
   );
 }

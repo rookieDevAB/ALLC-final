@@ -20,6 +20,25 @@ export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('waitlist');
 
+  // Orders state
+  const [orders, setOrders] = useState([]);
+  const [oPage, setOPage] = useState(1);
+  const [oStatus, setOStatus] = useState('');
+  const [oPagination, setOPagination] = useState({ totalPages: 1, total: 0 });
+  const [oLoading, setOLoading] = useState(false);
+
+  // Customers state
+  const [customers, setCustomers] = useState([]);
+  const [cSearch, setCSearch] = useState('');
+  const [cSearchDraft, setCSearchDraft] = useState('');
+  const [cPage, setCPage] = useState(1);
+  const [cPagination, setCPagination] = useState({ totalPages: 1, total: 0 });
+  const [cLoading, setCLoading] = useState(false);
+
+  // Services state
+  const [servicesData, setServicesData] = useState([]);
+  const [sLoading, setSLoading] = useState(false);
+
   // Waitlist state
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0, limit: 10 });
@@ -75,6 +94,104 @@ export default function AdminDashboard() {
   }, [statusFilter, search, page, limit, sortBy, sortOrder]);
 
   useEffect(() => { loadItems(); }, [loadItems]);
+
+  // Orders loader
+  const loadOrders = useCallback(async () => {
+    setOLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(oPage), limit: '15' });
+      if (oStatus) params.set('status', oStatus);
+      const data = await apiGet(`/api/v1/payments/admin/orders?${params.toString()}`);
+      setOrders(data.items || []);
+      setOPagination(data.pagination || { totalPages: 1, total: 0 });
+    } catch {
+      showToast('Failed to load orders');
+    } finally {
+      setOLoading(false);
+    }
+  }, [oPage, oStatus]);
+
+  useEffect(() => { loadOrders(); }, [loadOrders]);
+
+  const updateOrderStatus = async (id, status) => {
+    try {
+      await apiPatch(`/api/v1/payments/admin/orders/${id}`, { status });
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+      showToast('Order status updated');
+    } catch {
+      showToast('Failed to update status');
+    }
+  };
+
+  // Customers loader
+  const loadCustomers = useCallback(async () => {
+    setCLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(cPage), limit: '15' });
+      if (cSearch) params.set('search', cSearch);
+      const data = await apiGet(`/api/v1/admin/customers?${params.toString()}`);
+      setCustomers(data.items || []);
+      setCPagination(data.pagination || { totalPages: 1, total: 0 });
+    } catch {
+      showToast('Failed to load customers');
+    } finally {
+      setCLoading(false);
+    }
+  }, [cPage, cSearch]);
+
+  useEffect(() => { loadCustomers(); }, [loadCustomers]);
+
+  const toggleCustomerActive = async (id, currentStatus) => {
+    try {
+      await apiPatch(`/api/v1/admin/customers/${id}`, { isActive: !currentStatus });
+      setCustomers(prev => prev.map(c => c.id === id ? { ...c, isActive: !currentStatus } : c));
+      showToast('Customer account updated');
+    } catch {
+      showToast('Failed to update customer');
+    }
+  };
+
+  // Services loaders / handlers
+  const loadServices = useCallback(async () => {
+    setSLoading(true);
+    try {
+      const data = await apiGet(`/api/v1/services/admin/all`);
+      setServicesData(data.services || []);
+    } catch {
+      showToast('Failed to load services');
+    } finally {
+      setSLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadServices(); }, [loadServices]);
+
+  const handleUpdatePathway = async (pathwayId, field, value) => {
+    try {
+      if (field === 'priceRs') value = Number(value);
+      await apiPatch(`/api/v1/services/admin/pathway/${pathwayId}`, { [field]: value });
+      
+      setServicesData(prev => prev.map(s => {
+        return {
+          ...s,
+          pathways: s.pathways.map(p => p.id === pathwayId ? { ...p, [field]: value } : p)
+        };
+      }));
+      showToast('Pathway updated successfully');
+    } catch {
+      showToast('Failed to update pathway');
+    }
+  };
+
+  const handleUpdateService = async (serviceId, field, value) => {
+    try {
+      await apiPatch(`/api/v1/services/admin/${serviceId}`, { [field]: value });
+      setServicesData(prev => prev.map(s => s.id === serviceId ? { ...s, [field]: value } : s));
+      showToast('Service updated successfully');
+    } catch {
+      showToast('Failed to update service');
+    }
+  };
 
   // Blog loaders / handlers
   const refreshBlogPosts = useCallback(async () => {
@@ -202,10 +319,13 @@ export default function AdminDashboard() {
         </header>
 
         {/* Tab Switcher */}
-        <div className="flex gap-1" style={{ borderBottom: `2px solid ${C.border}` }}>
+        <div className="flex gap-1 overflow-x-auto" style={{ borderBottom: `2px solid ${C.border}` }}>
           {[
             { key: 'waitlist', label: '📋 Waitlist' },
-            { key: 'blog',     label: '📝 Blog Posts' },
+            { key: 'orders',   label: '🛒 Orders' },
+            { key: 'customers',label: '👥 Customers' },
+            { key: 'services', label: '⚕️ Programs' },
+            { key: 'blog',     label: '📝 Blog' },
             { key: 'account',  label: '🔑 Account' },
           ].map(({ key, label }) => (
             <button
@@ -231,7 +351,288 @@ export default function AdminDashboard() {
           </p>
         )}
 
+        {/* ── CUSTOMERS TAB ──────────────────────────────────── */}
+        {activeTab === 'customers' && (
+          <div className="space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); setCPage(1); setCSearch(cSearchDraft.trim()); }} className="flex gap-3">
+              <input
+                className="flex-1 max-w-sm rounded-md px-3 py-2"
+                style={{ background: '#fff', border: `1px solid ${C.border}` }}
+                placeholder="Search name, email, phone..."
+                value={cSearchDraft}
+                onChange={(e) => setCSearchDraft(e.target.value)}
+              />
+              <button className="px-4 py-2 rounded-md text-white" style={{ background: C.accent }} type="submit">Search</button>
+            </form>
+
+            <div className="bg-white rounded-xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+              <table className="w-full text-left text-sm">
+                <thead style={{ background: C.surface }}>
+                  <tr>
+                    <th className="px-4 py-3 font-semibold" style={{ color: C.muted }}>Name / Email</th>
+                    <th className="px-4 py-3 font-semibold" style={{ color: C.muted }}>Phone</th>
+                    <th className="px-4 py-3 font-semibold" style={{ color: C.muted }}>Orders</th>
+                    <th className="px-4 py-3 font-semibold" style={{ color: C.muted }}>Joined</th>
+                    <th className="px-4 py-3 font-semibold" style={{ color: C.muted }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cLoading ? (
+                    <tr><td colSpan="5" className="p-4 text-center">Loading...</td></tr>
+                  ) : customers.length === 0 ? (
+                    <tr><td colSpan="5" className="p-4 text-center text-gray-500">No customers found.</td></tr>
+                  ) : (
+                    customers.map(c => (
+                      <tr key={c.id} className="border-t" style={{ borderColor: C.border }}>
+                        <td className="px-4 py-3">
+                          <p className="font-bold text-gray-900">{c.name}</p>
+                          <p className="text-xs text-gray-500">{c.email}</p>
+                        </td>
+                        <td className="px-4 py-3">{c.phone || '—'}</td>
+                        <td className="px-4 py-3">{c._count?.orders || 0}</td>
+                        <td className="px-4 py-3 text-xs">{new Date(c.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => toggleCustomerActive(c.id, c.isActive)}
+                            className={`px-3 py-1 rounded text-xs font-bold ${c.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+                          >
+                            {c.isActive ? 'Active' : 'Suspended'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            
+            {cPagination.totalPages > 1 && (
+              <div className="flex gap-2">
+                <button disabled={cPage <= 1} onClick={() => setCPage(p => Math.max(p - 1, 1))} className="px-3 py-1 bg-white border rounded disabled:opacity-50">Prev</button>
+                <button disabled={cPage >= cPagination.totalPages} onClick={() => setCPage(p => Math.min(p + 1, cPagination.totalPages))} className="px-3 py-1 bg-white border rounded disabled:opacity-50">Next</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── ORDERS TAB ─────────────────────────────────────── */}
+        {activeTab === 'orders' && (
+          <div className="space-y-4">
+            <div className="flex gap-3 mb-4">
+              <select
+                className="rounded-md px-3 py-2"
+                style={{ background: '#fff', border: `1px solid ${C.border}` }}
+                value={oStatus}
+                onChange={(e) => { setOPage(1); setOStatus(e.target.value); }}
+              >
+                <option value="">All Statuses</option>
+                <option value="PAID">PAID</option>
+                <option value="PENDING">PENDING</option>
+                <option value="CREATED">CREATED</option>
+                <option value="FAILED">FAILED</option>
+                <option value="REFUNDED">REFUNDED</option>
+              </select>
+            </div>
+
+            <div className="bg-white rounded-xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+              <table className="w-full text-left text-sm">
+                <thead style={{ background: C.surface }}>
+                  <tr>
+                    <th className="px-4 py-3 font-semibold" style={{ color: C.muted }}>Txn ID & Date</th>
+                    <th className="px-4 py-3 font-semibold" style={{ color: C.muted }}>Patient</th>
+                    <th className="px-4 py-3 font-semibold" style={{ color: C.muted }}>Services Booked</th>
+                    <th className="px-4 py-3 font-semibold" style={{ color: C.muted }}>Amount</th>
+                    <th className="px-4 py-3 font-semibold" style={{ color: C.muted }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {oLoading ? (
+                    <tr><td colSpan="5" className="p-4 text-center">Loading...</td></tr>
+                  ) : orders.length === 0 ? (
+                    <tr><td colSpan="5" className="p-4 text-center text-gray-500">No orders found.</td></tr>
+                  ) : (
+                    orders.map(o => (
+                      <tr key={o.id} className="border-t" style={{ borderColor: C.border }}>
+                        <td className="px-4 py-3 align-top">
+                          <p className="font-mono text-xs">{o.txnid}</p>
+                          <p className="text-xs text-gray-500">{new Date(o.createdAt).toLocaleString()}</p>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <p className="font-bold text-gray-900">{o.patientName}</p>
+                          <p className="text-xs text-gray-500">{o.patientEmail}</p>
+                          <p className="text-xs text-gray-500">{o.patientPhone}</p>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          {o.items?.map((item, i) => (
+                            <div key={item.id} className={i > 0 ? "mt-2 pt-2 border-t border-gray-100" : ""}>
+                              <p className="font-medium text-gray-800">{item.service?.title}</p>
+                              <p className="text-xs text-gray-500">{item.pathway?.name}</p>
+                            </div>
+                          ))}
+                        </td>
+                        <td className="px-4 py-3 align-top font-semibold text-teal-800">
+                          ₹{o.totalAmountRs.toLocaleString('en-IN')}
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <select
+                            className="rounded-md px-2 py-1 text-xs font-bold uppercase tracking-wider"
+                            style={{ 
+                              background: o.status === 'PAID' ? '#dcfce7' : o.status === 'FAILED' ? '#fee2e2' : '#fef3c7',
+                              color: o.status === 'PAID' ? '#15803d' : o.status === 'FAILED' ? '#b91c1c' : '#b45309',
+                              border: `1px solid ${C.border}` 
+                            }}
+                            value={o.status}
+                            onChange={(e) => updateOrderStatus(o.id, e.target.value)}
+                          >
+                            <option value="CREATED">CREATED</option>
+                            <option value="PAID">PAID</option>
+                            <option value="FAILED">FAILED</option>
+                            <option value="PENDING">PENDING</option>
+                            <option value="REFUNDED">REFUNDED</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {oPagination.totalPages > 1 && (
+              <div className="flex gap-2">
+                <button disabled={oPage <= 1} onClick={() => setOPage(p => Math.max(p - 1, 1))} className="px-3 py-1 bg-white border rounded disabled:opacity-50">Prev</button>
+                <button disabled={oPage >= oPagination.totalPages} onClick={() => setOPage(p => Math.min(p + 1, oPagination.totalPages))} className="px-3 py-1 bg-white border rounded disabled:opacity-50">Next</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SERVICES / PROGRAMS TAB ─────────────────────────────────────── */}
+        {activeTab === 'services' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold" style={{ color: C.primary }}>Program Manager</h2>
+              <button 
+                onClick={loadServices}
+                className="px-4 py-2 rounded-md bg-white border border-gray-200 shadow-sm text-sm"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {sLoading ? (
+              <p>Loading programs...</p>
+            ) : servicesData.length === 0 ? (
+              <p>No programs found.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-6">
+                {servicesData.map(service => (
+                  <div key={service.id} className="bg-white rounded-xl shadow-sm border overflow-hidden p-6" style={{ borderColor: C.border }}>
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1 mr-4">
+                        <input
+                          type="text"
+                          className="text-lg font-bold w-full bg-transparent border-b border-transparent hover:border-gray-300 focus:border-teal-500 outline-none pb-1 transition-colors"
+                          style={{ color: C.primary }}
+                          defaultValue={service.title}
+                          onBlur={(e) => {
+                            if (e.target.value !== service.title) handleUpdateService(service.id, 'title', e.target.value);
+                          }}
+                        />
+                        <textarea
+                          className="w-full text-sm mt-1 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-teal-500 outline-none pb-1 transition-colors resize-none overflow-hidden"
+                          style={{ color: C.muted, minHeight: '40px' }}
+                          defaultValue={service.description}
+                          onBlur={(e) => {
+                            if (e.target.value !== service.description) handleUpdateService(service.id, 'description', e.target.value);
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-semibold text-gray-500 uppercase">Active</label>
+                        <input
+                          type="checkbox"
+                          className="toggle toggle-sm toggle-success"
+                          checked={service.isActive}
+                          onChange={(e) => handleUpdateService(service.id, 'isActive', e.target.checked)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 border-t pt-4" style={{ borderColor: C.border }}>
+                      <h4 className="text-sm font-bold uppercase tracking-wider mb-3 text-gray-500">Pathways / Pricing</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead>
+                            <tr className="text-gray-500 border-b">
+                              <th className="pb-2 font-semibold">Pathway Name</th>
+                              <th className="pb-2 font-semibold">Duration</th>
+                              <th className="pb-2 font-semibold">Price (₹)</th>
+                              <th className="pb-2 text-right font-semibold">Active</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {service.pathways.map(pathway => (
+                              <tr key={pathway.id} className="border-b last:border-0 hover:bg-gray-50">
+                                <td className="py-2 pr-2">
+                                  <input
+                                    className="w-full bg-transparent border-b border-transparent hover:border-gray-300 focus:border-teal-500 outline-none text-gray-800"
+                                    defaultValue={pathway.name}
+                                    onBlur={(e) => {
+                                      if (e.target.value !== pathway.name) handleUpdatePathway(pathway.id, 'name', e.target.value);
+                                    }}
+                                  />
+                                </td>
+                                <td className="py-2 pr-2">
+                                  <input
+                                    className="w-24 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-teal-500 outline-none text-gray-600"
+                                    defaultValue={pathway.duration}
+                                    onBlur={(e) => {
+                                      if (e.target.value !== pathway.duration) handleUpdatePathway(pathway.id, 'duration', e.target.value);
+                                    }}
+                                  />
+                                </td>
+                                <td className="py-2 pr-2">
+                                  <div className="flex items-center">
+                                    <span className="text-gray-500 mr-1">₹</span>
+                                    <input
+                                      type="number"
+                                      className="w-24 font-mono font-semibold bg-transparent border-b border-transparent hover:border-gray-300 focus:border-teal-500 outline-none text-teal-800"
+                                      defaultValue={pathway.priceRs}
+                                      onBlur={(e) => {
+                                        if (Number(e.target.value) !== pathway.priceRs) handleUpdatePathway(pathway.id, 'priceRs', e.target.value);
+                                      }}
+                                    />
+                                  </div>
+                                </td>
+                                <td className="py-2 text-right">
+                                  <input
+                                    type="checkbox"
+                                    className="checkbox checkbox-sm checkbox-success"
+                                    checked={pathway.isActive}
+                                    onChange={(e) => handleUpdatePathway(pathway.id, 'isActive', e.target.checked)}
+                                  />
+                                </td>
+                              </tr>
+                            ))}
+                            {service.pathways.length === 0 && (
+                              <tr>
+                                <td colSpan="4" className="py-3 text-center text-gray-400 italic">No pathways created for this program.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── BLOG TAB ───────────────────────────────────────── */}
+
         {activeTab === 'blog' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">

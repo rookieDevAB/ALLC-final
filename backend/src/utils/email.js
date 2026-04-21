@@ -81,3 +81,86 @@ export async function sendPasswordResetEmail({ email, resetToken, baseUrl }) {
     html,
   });
 }
+
+/**
+ * Send booking confirmation to patient + internal clinic notification.
+ * @param {object} order — ServiceOrder with items.service and items.pathway included
+ */
+export async function sendBookingConfirmation(order) {
+  const CLINIC_EMAIL = process.env.CLINIC_NOTIFY_EMAIL || 'contact@asianllc.com';
+
+  const formatPrice = (rs) => `₹${Number(rs).toLocaleString('en-IN')}`;
+
+  const itemRows = order.items
+    .map(
+      (i) => `
+        <tr>
+          <td style="padding: 10px 12px; border-bottom: 1px solid #e0f0ee; color: #062926; font-size: 14px;">
+            ${i.service.title}
+          </td>
+          <td style="padding: 10px 12px; border-bottom: 1px solid #e0f0ee; color: #4A7C78; font-size: 14px;">
+            ${i.pathway.name} · ${i.pathway.duration}
+          </td>
+          <td style="padding: 10px 12px; border-bottom: 1px solid #e0f0ee; color: #062926; font-size: 14px; text-align: right; font-weight: 600;">
+            ${formatPrice(i.priceRs)}
+          </td>
+        </tr>`,
+    )
+    .join('');
+
+  const patientHtml = `
+    <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #f8fffe; border: 1px solid #e0f0ee; border-radius: 12px; overflow: hidden;">
+      <div style="background: #062926; padding: 28px 32px;">
+        <p style="color: #2AB5A5; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 6px;">ALLC Clinic</p>
+        <h1 style="color: #fff; font-size: 22px; margin: 0;">Booking Confirmed ✅</h1>
+      </div>
+      <div style="padding: 28px 32px;">
+        <p style="color: #4A7C78; font-size: 14px; margin: 0 0 20px;">
+          Hi <strong style="color: #062926;">${order.patientName}</strong>, your booking is confirmed.
+          Our team will contact you within <strong>24 hours</strong> to schedule your first session.
+        </p>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <thead>
+            <tr style="background: #DCF4F1;">
+              <th style="padding: 10px 12px; text-align: left; font-size: 11px; color: #4A7C78; text-transform: uppercase; letter-spacing: 1px;">Program</th>
+              <th style="padding: 10px 12px; text-align: left; font-size: 11px; color: #4A7C78; text-transform: uppercase; letter-spacing: 1px;">Pathway</th>
+              <th style="padding: 10px 12px; text-align: right; font-size: 11px; color: #4A7C78; text-transform: uppercase; letter-spacing: 1px;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" style="padding: 12px; font-weight: 700; color: #062926; font-size: 15px;">Total Paid</td>
+              <td style="padding: 12px; font-weight: 700; color: #2AB5A5; font-size: 15px; text-align: right;">${formatPrice(order.totalAmountRs)}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <p style="color: #4A7C78; font-size: 13px; margin: 0 0 4px;">Booking ID: <strong style="color: #062926;">${order.txnid}</strong></p>
+        <p style="color: #4A7C78; font-size: 13px; margin: 0;">Supervised by Dr. Divya Gautam &amp; the ALLC team.</p>
+      </div>
+      <div style="background: #DCF4F1; padding: 16px 32px;">
+        <p style="color: #4A7C78; font-size: 11px; margin: 0;">ALLC — Asian Lifestyle Longevity Clinic · contact@asianllc.com</p>
+      </div>
+    </div>
+  `;
+
+  const clinicHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; border: 1px solid #ddd; border-radius: 8px;">
+      <h2 style="color: #062926; margin: 0 0 12px;">New Booking — ${order.txnid}</h2>
+      <p><strong>Patient:</strong> ${order.patientName}</p>
+      <p><strong>Email:</strong> ${order.patientEmail}</p>
+      <p><strong>Phone:</strong> ${order.patientPhone}</p>
+      <p><strong>Total:</strong> ${formatPrice(order.totalAmountRs)}</p>
+      <p><strong>Programs:</strong></p>
+      <ul>${order.items.map((i) => `<li>${i.service.title} — ${i.pathway.name}</li>`).join('')}</ul>
+    </div>
+  `;
+
+  await Promise.allSettled([
+    sendEmail({ to: order.patientEmail, subject: `Booking Confirmed — ALLC Clinic [${order.txnid}]`, html: patientHtml }),
+    sendEmail({ to: CLINIC_EMAIL,        subject: `New Booking: ${order.patientName} — ${formatPrice(order.totalAmountRs)}`, html: clinicHtml }),
+  ]);
+}
+

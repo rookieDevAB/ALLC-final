@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -19,6 +18,14 @@ enum WaitlistStatus {
   UNDER_REVIEW
   ACCEPTED
   REJECTED
+}
+
+enum OrderStatus {
+  CREATED
+  PAID
+  FAILED
+  PENDING
+  REFUNDED
 }
 
 model User {
@@ -103,7 +110,7 @@ model BlogPost {
   category         String
   author           String   @default("Dr. Divya Gautam")
   coverImage       String?
-  tags             String[] @default([])
+  tags             Json     @default("[]")
   published        Boolean  @default(false)
   date             DateTime @default(now())
   createdAt        DateTime @default(now())
@@ -111,4 +118,115 @@ model BlogPost {
 
   @@index([published, createdAt])
   @@index([category])
+}
+
+// ─── Customer (patient-facing accounts) ─────────────────────────────────────
+
+model Customer {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orders ServiceOrder[]
+
+  refreshTokens CustomerRefreshToken[]
+
+  @@index([email])
+}
+
+model CustomerRefreshToken {
+  id         String    @id @default(cuid())
+  customerId String
+  tokenHash  String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+// ─── Services ────────────────────────────────────────────────────────────────
+
+model Service {
+  id            String           @id              // "00", "01" … "08"
+  programNumber String                            // "CONSULTATION", "PROGRAM 01"
+  title         String
+  subtitle      String?
+  category      String
+  description   String           @db.Text
+  outcomes      Json             @default("[]")   // string[]
+  isActive      Boolean          @default(true)
+  sortOrder     Int              @default(0)
+
+  pathways      ServicePathway[]
+  orderItems    OrderItem[]
+
+  @@index([isActive])
+}
+
+model ServicePathway {
+  id          String   @id                        // "ind", "couple", "ind-ess" …
+  serviceId   String
+  name        String
+  duration    String
+  description String   @db.Text
+  priceRs     Int                                 // 0 = no price → redirect to contact
+  isActive    Boolean  @default(true)
+
+  service    Service      @relation(fields: [serviceId], references: [id])
+  orderItems OrderItem[]
+
+  @@index([serviceId])
+}
+
+model ServiceOrder {
+  id                String      @id @default(cuid())
+  txnid             String      @unique            // "ALLC-<timestamp>-<random>"
+  payuMihpayid      String?                        // PayU's mihpayid after payment
+  payuHash          String?                        // response hash for verification
+
+  patientName       String
+  patientEmail      String
+  patientPhone      String
+
+  totalAmountRs     Int
+  status            OrderStatus @default(CREATED)
+  payuStatus        String?                        // "success" / "failure" / "pending"
+  payuResponse      Json?                          // full raw PayU response
+
+  customerId        String?                        // linked after customer registers
+  customer          Customer?   @relation(fields: [customerId], references: [id])
+
+  items             OrderItem[]
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([status])
+  @@index([patientEmail])
+  @@index([txnid])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  serviceId   String
+  pathwayId   String
+  priceRs     Int                                  // snapshot price at purchase time
+
+  order   ServiceOrder   @relation(fields: [orderId], references: [id])
+  service Service        @relation(fields: [serviceId], references: [id])
+  pathway ServicePathway @relation(fields: [pathwayId], references: [id])
+
+  @@index([orderId])
 }
